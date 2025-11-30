@@ -6,7 +6,9 @@ using SandBox;
 using SandBox.Conversation;
 using SandBox.Missions.AgentBehaviors;
 
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 
 using TaleWorlds.CampaignSystem;
@@ -19,9 +21,6 @@ namespace Adoption.CampaignBehaviors
 {
     public class AdoptionCampaignBehavior : CampaignBehaviorBase
     {
-        public delegate void SetHeroStaticBodyPropertiesDelegate(Hero instance, StaticBodyProperties @value);
-        public readonly SetHeroStaticBodyPropertiesDelegate? SetHeroStaticBodyProperties = AccessTools2.GetPropertySetterDelegate<SetHeroStaticBodyPropertiesDelegate>(typeof(Hero), "StaticBodyProperties");
-
         private readonly Dictionary<Agent, AdoptionState> _previousAdoptionAttempts = new();
 
         private enum AdoptionState
@@ -81,80 +80,143 @@ namespace Adoption.CampaignBehaviors
 
         private bool conversation_adopt_child_on_condition()
         {
-            Agent agent = (Agent)Campaign.Current.ConversationManager.OneToOneConversationAgent;
-
-            if (agent.Age >= Campaign.Current.Models.AgeModel.HeroComesOfAge)
+            try
             {
+                Agent agent = (Agent)Campaign.Current.ConversationManager.OneToOneConversationAgent;
+
+                if (agent.Age >= Campaign.Current.Models.AgeModel.HeroComesOfAge)
+                {
+                    return false;
+                }
+
+                if (!_previousAdoptionAttempts.TryGetValue(agent, out AdoptionState adoptionState))
+                {
+                    // Clear out any old attempts
+                    RemoveUnneededAdoptionAttempts();
+
+                    _previousAdoptionAttempts.Add(agent, AdoptionState.Untested);
+                }
+
+                if (adoptionState == AdoptionState.CanAdopt)
+                {
+                    return true;
+                }
+                if (adoptionState == AdoptionState.Ended || adoptionState == AdoptionState.Adopted)
+                {
+                    return false;
+                }
+
+                float adoptionChance = Settings.Instance!.AdoptionChance;
+                Debug.Print($"Adoption chance: {adoptionChance}");
+
+                float random = MBRandom.RandomFloat;
+                Debug.Print($"Random number: {random}");
+
+                if (random < adoptionChance)
+                {
+                    Debug.Print($"Can adopt {agent}");
+                    _previousAdoptionAttempts[agent] = AdoptionState.CanAdopt;
+                    return true;
+                }
+                else
+                {
+                    Debug.Print($"Cannot adopt {agent}");
+                    _previousAdoptionAttempts[agent] = AdoptionState.Ended;
+                }
+
                 return false;
             }
-
-            if (!_previousAdoptionAttempts.TryGetValue(agent, out AdoptionState adoptionState))
+            catch (Exception ex)
             {
-                // Clear out any old attempts
-                RemoveUnneededAdoptionAttempts();
-
-                _previousAdoptionAttempts.Add(agent, AdoptionState.Untested);
-            }
-
-            if (adoptionState == AdoptionState.CanAdopt)
-            {
-                return true;
-            }
-            if (adoptionState == AdoptionState.Ended || adoptionState == AdoptionState.Adopted)
-            {
+                LogException(ex, "conversation_adopt_child_on_condition");
                 return false;
             }
-
-            float adoptionChance = Settings.Instance!.AdoptionChance;
-            Debug.Print($"Adoption chance: {adoptionChance}");
-               
-            float random = MBRandom.RandomFloat;
-            Debug.Print($"Random number: {random}");
-
-            if (random < adoptionChance)
-            {
-                Debug.Print($"Can adopt {agent}");
-                _previousAdoptionAttempts[agent] = AdoptionState.CanAdopt;
-                return true;
-            }
-            else
-            {
-                Debug.Print($"Cannot adopt {agent}");
-                _previousAdoptionAttempts[agent] = AdoptionState.Ended;
-            }
-            return false;
         }
 
         private void conversation_adopt_child_on_consequence()
         {
-            Agent agent = (Agent)Campaign.Current.ConversationManager.OneToOneConversationAgent;
-            CharacterObject character = Campaign.Current.ConversationManager.OneToOneConversationCharacter;
+            try
+            {
+                Agent agent = (Agent)Campaign.Current.ConversationManager.OneToOneConversationAgent;
+                CharacterObject character = Campaign.Current.ConversationManager.OneToOneConversationCharacter;
 
-            _previousAdoptionAttempts[agent] = AdoptionState.Adopted;
+                _previousAdoptionAttempts[agent] = AdoptionState.Adopted;
 
-            // Create hero object from character
-            Settlement settlement = Hero.MainHero.CurrentSettlement;
-            int age = MBMath.ClampInt((int)agent.Age, Campaign.Current.Models.AgeModel.BecomeChildAge, Campaign.Current.Models.AgeModel.HeroComesOfAge);
-            Hero hero = HeroCreator.CreateSpecialHero(character, settlement, Clan.PlayerClan, null, age);
-            AdoptedHeroCreator.CreateAdoptedHero(hero, settlement);
+                // Create hero object from character
+                Settlement settlement = Hero.MainHero.CurrentSettlement;
+                int age = MBMath.ClampInt((int)agent.Age, Campaign.Current.Models.AgeModel.BecomeChildAge, Campaign.Current.Models.AgeModel.HeroComesOfAge);
+                Hero hero = HeroCreator.CreateSpecialHero(character, settlement, Clan.PlayerClan, null, age);
+                AdoptedHeroCreator.CreateAdoptedHero(hero, settlement);
 
-            // Copy appearance from agent
-            SetHeroStaticBodyProperties!(hero, agent.BodyPropertiesValue.StaticProperties);
-            hero.Weight = agent.BodyPropertiesValue.Weight;
-            hero.Build = agent.BodyPropertiesValue.Build;
+                // Copy appearance from agent
+                ReflectionHelpers.TrySetHeroStaticBodyProperties(hero, agent.BodyPropertiesValue.StaticProperties);
+                hero.Weight = agent.BodyPropertiesValue.Weight;
+                hero.Build = agent.BodyPropertiesValue.Build;
 
-            // Agent follows player character
-            Campaign.Current.ConversationManager.ConversationEndOneShot += FollowMainAgent;
+                // Agent follows player character
+                Campaign.Current.ConversationManager.ConversationEndOneShot += FollowMainAgent;
+            }
+            catch (Exception ex)
+            {
+                LogException(ex, "conversation_adopt_child_on_consequence");
+            }
         }
 
         public void RemoveUnneededAdoptionAttempts()
         {
-            foreach (var pair in _previousAdoptionAttempts.ToList())
+            try
             {
-                if (!Mission.Current.Agents.Contains(pair.Key))
+                var mission = Mission.Current;
+                if (mission is null)
+                    return;
+
+                // Build a set of currently present agents by reflecting the "Agents" member
+                var presentAgents = new HashSet<Agent>();
+
+                object? agentsObj = null;
+                var missionType = mission.GetType();
+
+                // Try property, then field, then method
+                var prop = missionType.GetProperty("Agents");
+                if (prop != null)
+                    agentsObj = prop.GetValue(mission);
+                else
                 {
-                    _previousAdoptionAttempts.Remove(pair.Key);
+                    var field = missionType.GetField("Agents");
+                    if (field != null)
+                        agentsObj = field.GetValue(mission);
+                    else
+                    {
+                        var method = missionType.GetMethod("GetAgents") ?? missionType.GetMethod("get_Agents");
+                        if (method != null)
+                            agentsObj = method.Invoke(mission, null);
+                    }
                 }
+
+                if (agentsObj is System.Collections.IEnumerable enumerable)
+                {
+                    foreach (var item in enumerable)
+                    {
+                        if (item is Agent a)
+                            presentAgents.Add(a);
+                    }
+                }
+
+                // If we couldn't obtain agents, be conservative and skip removal
+                if (presentAgents.Count == 0)
+                    return;
+
+                foreach (var pair in _previousAdoptionAttempts.ToList())
+                {
+                    if (!presentAgents.Contains(pair.Key))
+                    {
+                        _previousAdoptionAttempts.Remove(pair.Key);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogException(ex, "RemoveUnneededAdoptionAttempts");
             }
         }
 
@@ -174,6 +236,62 @@ namespace Adoption.CampaignBehaviors
                 {
                     _previousAdoptionAttempts[pair.Key] = AdoptionState.Untested;
                 }
+            }
+        }
+
+        private static void LogException(Exception ex, string context)
+        {
+            string moduleDir = null;
+            string logPath = null;
+
+            try
+            {
+                // Attempt to determine the module folder using the module assembly location
+                try
+                {
+                    var asmDir = Path.GetDirectoryName(typeof(SubModule).Assembly.Location) ?? string.Empty;
+                    var dirInfo = new DirectoryInfo(asmDir);
+                    string found = null;
+                    for (var anc = dirInfo; anc != null; anc = anc.Parent)
+                    {
+                        if (anc.Parent != null && anc.Parent.Name.Equals("Modules", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // anc is the module folder (e.g. ...\Modules\Adoption)
+                            found = anc.FullName;
+                            break;
+                        }
+                    }
+
+                    moduleDir = found ?? Path.Combine(Directory.GetCurrentDirectory(), "Modules", "Adoption");
+                }
+                catch
+                {
+                    moduleDir = Path.Combine(Directory.GetCurrentDirectory(), "Modules", "Adoption");
+                }
+
+                if (!Directory.Exists(moduleDir))
+                {
+                    Directory.CreateDirectory(moduleDir);
+                }
+
+                logPath = Path.Combine(moduleDir, "adoption_error.log");
+                string entry = $"{DateTime.UtcNow:o} [{context}] {ex}\n\n";
+                File.AppendAllText(logPath, entry);
+            }
+            catch
+            {
+                // swallow — logging must not crash the game
+            }
+
+            try
+            {
+                // show the actual path we attempted to write to (fallback to a reasonable default if null)
+                var displayPath = logPath ?? Path.Combine(Directory.GetCurrentDirectory(), "Modules", "Adoption", "adoption_error.log");
+                InformationManager.DisplayMessage(new InformationMessage($"[Adoption] Error occurred ({context}). Log: {displayPath}"));
+            }
+            catch
+            {
+                // ignore UI errors
             }
         }
     }

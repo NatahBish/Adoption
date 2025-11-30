@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
@@ -21,106 +20,42 @@ namespace Adoption
     {
         public static void CreateAdoptedHero(Hero hero, Settlement settlement)
         {
-            // initial snapshot
-            try
-            {
-                var templateName = hero.CharacterObject?.StringId ?? hero.CharacterObject?.Name?.ToString() ?? "unknown_template";
-                var cultureName = GetCultureName(hero);
-                ReflectionHelpers.LogToModule($"CREATE_ADOPTED_HERO START - template={templateName} culture={cultureName}");
-                ReflectionHelpers.LogWealthSnapshot("before_create_adopted_hero");
-            }
-            catch { }
-
             // Parent assignments
-            try
-            {
-                CreateRandomLostParent(hero, settlement);
-                ReflectionHelpers.LogToModule("After CreateRandomLostParent");
-                ReflectionHelpers.LogWealthSnapshot("after_CreateRandomLostParent");
-            }
-            catch (Exception ex)
-            {
-                ReflectionHelpers.LogToModule($"CreateRandomLostParent threw: {ex}");
-            }
+            CreateRandomLostParent(hero, settlement);
 
             // Traits derived from DeliverOffSpring method
             try
             {
                 LordTraits(hero, hero.Mother, hero.Father);
-                ReflectionHelpers.LogToModule("After LordTraits");
-                ReflectionHelpers.LogWealthSnapshot("after_LordTraits");
             }
-            catch (Exception ex)
-            {
-                ReflectionHelpers.LogToModule($"LordTraits threw: {ex}");
-            }
+            catch { }
 
             // Common updates after creating hero
             try
             {
                 hero.SetNewOccupation(Occupation.Lord);
-                ReflectionHelpers.LogToModule("After SetNewOccupation");
-                ReflectionHelpers.LogWealthSnapshot("after_SetNewOccupation");
-            }
-            catch (Exception ex)
-            {
-                ReflectionHelpers.LogToModule($"SetNewOccupation threw: {ex}");
-            }
-
-            try
-            {
                 hero.UpdateHomeSettlement();
-                ReflectionHelpers.LogToModule("After UpdateHomeSettlement");
-                ReflectionHelpers.LogWealthSnapshot("after_UpdateHomeSettlement");
             }
-            catch (Exception ex)
-            {
-                ReflectionHelpers.LogToModule($"UpdateHomeSettlement threw: {ex}");
-            }
+            catch { }
 
             // Initialize hero developer (version tolerant)
             try
             {
                 TryInitializeHeroDeveloper(hero);
-                ReflectionHelpers.LogToModule("After TryInitializeHeroDeveloper");
-                ReflectionHelpers.LogWealthSnapshot("after_TryInitializeHeroDeveloper");
             }
-            catch (Exception ex)
-            {
-                ReflectionHelpers.LogToModule($"TryInitializeHeroDeveloper threw: {ex}");
-            }
+            catch { }
 
             // Equipment derived from OnNewGameCreatedPartialFollowUp
             try
             {
                 EquipmentForChild(hero);
-                ReflectionHelpers.LogToModule("After EquipmentForChild");
-                ReflectionHelpers.LogWealthSnapshot("after_EquipmentForChild");
             }
-            catch (Exception ex)
-            {
-                ReflectionHelpers.LogToModule($"EquipmentForChild threw: {ex}");
-            }
+            catch { }
 
             // Custom notification for adoption
             try
             {
                 OnHeroAdopted(Hero.MainHero, hero);
-                ReflectionHelpers.LogToModule("After OnHeroAdopted");
-                ReflectionHelpers.LogWealthSnapshot("after_OnHeroAdopted");
-            }
-            catch (Exception ex)
-            {
-                ReflectionHelpers.LogToModule($"OnHeroAdopted threw: {ex}");
-            }
-
-            // final snapshot
-            try
-            {
-                var templateName = hero.CharacterObject?.StringId ?? hero.CharacterObject?.Name?.ToString() ?? "unknown_template";
-                var cultureName = GetCultureName(hero);
-                ReflectionHelpers.LogToModule($"CREATE_ADOPTED_HERO END - template={templateName} culture={cultureName}");
-                ReflectionHelpers.LogWealthSnapshot("after_create_adopted_hero");
             }
             catch { }
         }
@@ -143,7 +78,6 @@ namespace Adoption
                     }
                 }
 
-                // fallback: try CharacterObject.CultureName or ToString
                 var cultureNameProp = charObj.GetType().GetProperty("CultureName");
                 if (cultureNameProp != null)
                 {
@@ -166,11 +100,9 @@ namespace Adoption
                 int heroComesOfAge = Campaign.Current.Models.AgeModel.HeroComesOfAge;
                 int age = MBRandom.RandomInt(heroComesOfAge + (int)hero.Age, heroComesOfAge * 2 + (int)hero.Age);
 
-                // Get candidate templates in a version-tolerant way
                 var culture = settlement.Culture;
                 var templates = GetNotableAndWandererTemplates(culture).ToList();
 
-                // Prefer wanderer templates of the correct gender
                 IEnumerable<CharacterObject> candidates;
                 if (Hero.MainHero.IsFemale)
                 {
@@ -183,10 +115,8 @@ namespace Adoption
 
                 var candidateList = candidates.ToList();
 
-                // Fallbacks if none found
                 if (candidateList.Count == 0)
                 {
-                    // Try wanderer templates property if available
                     var wanderers = GetPropertyAsEnumerable<CharacterObject>(culture, "WandererTemplates")?.ToList();
                     if (wanderers != null && wanderers.Count > 0)
                     {
@@ -196,7 +126,6 @@ namespace Adoption
 
                 if (candidateList.Count == 0)
                 {
-                    // Final fallback: use any notable/wanderer template regardless of occupation/gender
                     candidateList = templates;
                 }
 
@@ -209,14 +138,6 @@ namespace Adoption
                 int idx = candidateList.Count == 1 ? 0 : MBRandom.RandomInt(0, candidateList.Count - 1);
                 CharacterObject randomElementWithPredicate = candidateList[idx];
 
-                // Snapshot clan before creating the parent hero
-                try
-                {
-                    var clan = Clan.PlayerClan;
-                    ReflectionHelpers.LogToModule($"Clan snapshot BEFORE CreateSpecialHero: {ReflectionHelpers.GetNumericPropsString(clan)}");
-                }
-                catch { }
-
                 if (Hero.MainHero.IsFemale)
                 {
                     hero.Father = HeroCreator.CreateSpecialHero(randomElementWithPredicate, hero.CurrentSettlement, Clan.PlayerClan, null, age);
@@ -224,40 +145,11 @@ namespace Adoption
                     // Clear any gold the created hero might carry (prevents transfer into clan)
                     ReflectionHelpers.TrySetHeroGold(hero.Father, 0);
 
-                    // Log details about the created hero
                     try
                     {
-                        ReflectionHelpers.LogToModule($"Created father hero: {hero.Father}. Hero numeric: {ReflectionHelpers.GetNumericPropsString(hero.Father)}");
+                        KillCharacterAction.ApplyByRemove(hero.Father);
                     }
                     catch { }
-
-                    ReflectionHelpers.LogToModule($"About to ApplyByRemove for father hero object: {hero.Father}");
-                    try
-                    {
-                        // snapshot before removal
-                        try
-                        {
-                            var clan = Clan.PlayerClan;
-                            ReflectionHelpers.LogToModule($"Clan snapshot BEFORE ApplyByRemove (father): {ReflectionHelpers.GetNumericPropsString(clan)}");
-                        }
-                        catch { }
-
-                        KillCharacterAction.ApplyByRemove(hero.Father);
-
-                        // snapshot after removal
-                        try
-                        {
-                            var clan = Clan.PlayerClan;
-                            ReflectionHelpers.LogToModule($"Clan snapshot AFTER ApplyByRemove (father): {ReflectionHelpers.GetNumericPropsString(clan)}");
-                        }
-                        catch { }
-
-                        ReflectionHelpers.LogToModule($"ApplyByRemove completed for father hero object: {hero.Father}");
-                    }
-                    catch (Exception ex)
-                    {
-                        ReflectionHelpers.LogToModule($"ApplyByRemove threw for father: {ex.Message}");
-                    }
 
                     ReflectionHelpers.TrySetCharacterHiddenInEncyclopedia(hero.Father.CharacterObject, true);
                 }
@@ -268,40 +160,11 @@ namespace Adoption
                     // Clear any gold the created hero might carry (prevents transfer into clan)
                     ReflectionHelpers.TrySetHeroGold(hero.Mother, 0);
 
-                    // Log details about the created hero
                     try
                     {
-                        ReflectionHelpers.LogToModule($"Created mother hero: {hero.Mother}. Hero numeric: {ReflectionHelpers.GetNumericPropsString(hero.Mother)}");
+                        KillCharacterAction.ApplyByRemove(hero.Mother);
                     }
                     catch { }
-
-                    ReflectionHelpers.LogToModule($"About to ApplyByRemove for mother hero object: {hero.Mother}");
-                    try
-                    {
-                        // snapshot before removal
-                        try
-                        {
-                            var clan = Clan.PlayerClan;
-                            ReflectionHelpers.LogToModule($"Clan snapshot BEFORE ApplyByRemove (mother): {ReflectionHelpers.GetNumericPropsString(clan)}");
-                        }
-                        catch { }
-
-                        KillCharacterAction.ApplyByRemove(hero.Mother);
-
-                        // snapshot after removal
-                        try
-                        {
-                            var clan = Clan.PlayerClan;
-                            ReflectionHelpers.LogToModule($"Clan snapshot AFTER ApplyByRemove (mother): {ReflectionHelpers.GetNumericPropsString(clan)}");
-                        }
-                        catch { }
-
-                        ReflectionHelpers.LogToModule($"ApplyByRemove completed for mother hero object: {hero.Mother}");
-                    }
-                    catch (Exception ex)
-                    {
-                        ReflectionHelpers.LogToModule($"ApplyByRemove threw for mother: {ex.Message}");
-                    }
 
                     ReflectionHelpers.TrySetCharacterHiddenInEncyclopedia(hero.Mother.CharacterObject, true);
                 }
@@ -309,7 +172,6 @@ namespace Adoption
             catch (Exception ex)
             {
                 InformationManager.DisplayMessage(new InformationMessage($"[Adoption] CreateRandomLostParent failed: {ex.Message}"));
-                ReflectionHelpers.LogToModule($"CreateRandomLostParent failed: {ex}");
             }
         }
 
@@ -356,9 +218,46 @@ namespace Adoption
                 {
                     Equipment randomCivilianEquipment = randomElementInefficiently.GetRandomCivilianEquipment();
                     EquipmentHelper.AssignHeroEquipmentFromEquipment(hero, randomCivilianEquipment);
-                    Equipment equipment = new(false);
-                    equipment.FillFrom(randomCivilianEquipment, false);
-                    EquipmentHelper.AssignHeroEquipmentFromEquipment(hero, equipment);
+
+                    // Attempt to construct a secondary Equipment instance in a version tolerant way,
+                    // but if the constructor or FillFrom isn't present simply skip the secondary assignment.
+                    try
+                    {
+                        var eqType = typeof(Equipment);
+                        object? newEquipment = null;
+                        var ctorBool = eqType.GetConstructor(new Type[] { typeof(bool) });
+                        if (ctorBool != null)
+                            newEquipment = ctorBool.Invoke(new object[] { false });
+                        else
+                        {
+                            var ctorParamless = eqType.GetConstructor(Type.EmptyTypes);
+                            if (ctorParamless != null)
+                                newEquipment = ctorParamless.Invoke(null);
+                            else
+                                newEquipment = Activator.CreateInstance(eqType);
+                        }
+
+                        if (newEquipment != null)
+                        {
+                            var fillFromMethod = eqType.GetMethod("FillFrom", new Type[] { typeof(Equipment), typeof(bool) }) ??
+                                                 eqType.GetMethod("FillFrom", new Type[] { typeof(Equipment) }) ??
+                                                 eqType.GetMethod("FillFrom", BindingFlags.Public | BindingFlags.Instance);
+
+                            if (fillFromMethod != null)
+                            {
+                                var pars = fillFromMethod.GetParameters();
+                                if (pars.Length == 2)
+                                    fillFromMethod.Invoke(newEquipment, new object[] { randomCivilianEquipment, false });
+                                else
+                                    fillFromMethod.Invoke(newEquipment, new object[] { randomCivilianEquipment });
+                                EquipmentHelper.AssignHeroEquipmentFromEquipment(hero, (Equipment)newEquipment);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // ignore equipment reflection failures
+                    }
                 }
             }
             catch
@@ -427,16 +326,13 @@ namespace Adoption
                             return;
                         }
 
-                        // older signature: (TextObject, int, BasicCharacterObject, string)
                         if (pars.Length == 4)
                         {
-                            // try to supply reasonable defaults
                             object basicChar = adopter.CharacterObject as BasicCharacterObject;
                             m.Invoke(null, new object[] { text, 0, basicChar, null });
                             return;
                         }
 
-                        // possible other signatures: (TextObject, string) or (TextObject, int)
                         if (pars.Length == 2)
                         {
                             if (pars[1].ParameterType == typeof(string))
@@ -457,7 +353,6 @@ namespace Adoption
                 // fall through to fallback below
             }
 
-            // fallback: show an information message if AddQuickInformation is not available
             InformationManager.DisplayMessage(new InformationMessage(text.ToString()));
         }
 
@@ -517,12 +412,11 @@ namespace Adoption
                     return true;
                 }
             }
-            catch (Exception ex)
+            catch
             {
-                InformationManager.DisplayMessage(new InformationMessage($"[Adoption] Hero developer init reflection failed: {ex.Message}"));
+                // ignore
             }
 
-            InformationManager.DisplayMessage(new InformationMessage("[Adoption] Could not initialize hero developer for this game version; continuing."));
             return false;
         }
 

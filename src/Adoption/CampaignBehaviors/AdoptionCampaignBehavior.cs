@@ -164,59 +164,12 @@ namespace Adoption.CampaignBehaviors
 
         public void RemoveUnneededAdoptionAttempts()
         {
-            try
+            foreach (var pair in _previousAdoptionAttempts.ToList())
             {
-                var mission = Mission.Current;
-                if (mission is null)
-                    return;
-
-                // Build a set of currently present agents by reflecting the "Agents" member
-                var presentAgents = new HashSet<Agent>();
-
-                object? agentsObj = null;
-                var missionType = mission.GetType();
-
-                // Try property, then field, then method
-                var prop = missionType.GetProperty("Agents");
-                if (prop != null)
-                    agentsObj = prop.GetValue(mission);
-                else
+                if (!Mission.Current.Agents.Contains(pair.Key))
                 {
-                    var field = missionType.GetField("Agents");
-                    if (field != null)
-                        agentsObj = field.GetValue(mission);
-                    else
-                    {
-                        var method = missionType.GetMethod("GetAgents") ?? missionType.GetMethod("get_Agents");
-                        if (method != null)
-                            agentsObj = method.Invoke(mission, null);
-                    }
+                    _previousAdoptionAttempts.Remove(pair.Key);
                 }
-
-                if (agentsObj is System.Collections.IEnumerable enumerable)
-                {
-                    foreach (var item in enumerable)
-                    {
-                        if (item is Agent a)
-                            presentAgents.Add(a);
-                    }
-                }
-
-                // If we couldn't obtain agents, be conservative and skip removal
-                if (presentAgents.Count == 0)
-                    return;
-
-                foreach (var pair in _previousAdoptionAttempts.ToList())
-                {
-                    if (!presentAgents.Contains(pair.Key))
-                    {
-                        _previousAdoptionAttempts.Remove(pair.Key);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LogException(ex, "RemoveUnneededAdoptionAttempts");
             }
         }
 

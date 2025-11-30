@@ -1,16 +1,15 @@
 ﻿using Helpers;
-
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-
+using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
-using TaleWorlds.CampaignSystem.Settlements;
-using TaleWorlds.CampaignSystem;
-using TaleWorlds.Core;
 using TaleWorlds.CampaignSystem.Extensions;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.Localization;
 
@@ -298,12 +297,15 @@ namespace Adoption
                         adoptedHero.Mother = null;
                     }
                 }
-                adoptedHero.SetPersonalRelation(Hero.MainHero, 50);
-                Hero.MainHero.SetPersonalRelation(adoptedHero, 50);
+                var rnd = new Random();
+                int value = MBRandom.RandomInt(30, 70);
+                adoptedHero.SetPersonalRelation(Hero.MainHero, value);
+                Hero.MainHero.SetPersonalRelation(adoptedHero, value);
                 if (null != Hero.MainHero.Spouse)
                 {
-                    adoptedHero.SetPersonalRelation(Hero.MainHero.Spouse, 50);
-                    Hero.MainHero.Spouse.SetPersonalRelation(adoptedHero, 50);
+                    value = MBRandom.RandomInt(30, 50);
+                    adoptedHero.SetPersonalRelation(Hero.MainHero.Spouse, value);
+                    Hero.MainHero.Spouse.SetPersonalRelation(adoptedHero, value);
                 }
             }
             catch

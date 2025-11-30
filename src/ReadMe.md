@@ -1,0 +1,5 @@
+This poorly updates the adoption mod to work with 1.3.6. I have never made or edited a mod before. This is a butcher of the original work.
+
+In honesty, I did this for myself because I want to play with this mod. If the original creator requests, I will take it down. Be warned, little testing was done other than on my current save. The current changes are minor; mainly, try catching the errors. I have added a random value to have the adopted kids at least have a positive relationship with the person who adopts them, and a spouse if one exists. I did keep some logging for my own sake, in case someone else uses this version of the mod and has issues. Be warned, I am not maintaining this mod for the public and take no fault in errors, save ruins, or bugs. USE AT YOUR OWN RISK
+
+In order to use this mod, copy the code from GitHub (green button in the top right and use the Adoption.zip file, either give that to Nexus (untested) or just unzip and put it in your Bannerlord modules folder.

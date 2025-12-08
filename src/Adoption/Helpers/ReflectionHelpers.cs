@@ -1,7 +1,7 @@
+using HarmonyLib.BUTR.Extensions;
 using System;
 using System.Linq;
 using System.Reflection;
-using HarmonyLib.BUTR.Extensions;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Core;
 

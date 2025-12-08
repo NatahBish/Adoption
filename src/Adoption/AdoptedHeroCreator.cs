@@ -1,9 +1,7 @@
 ﻿using Helpers;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
@@ -88,12 +86,13 @@ namespace Adoption
                     {
                         randomElementWithPredicate = settlement.Culture.NotableTemplates.GetRandomElementWithPredicate((CharacterObject x) => x.Occupation == Occupation.Merchant && x.IsFemale);
                     }
-                    if(null == randomElementWithPredicate)
+                    if (null == randomElementWithPredicate)
                     {
                         randomElementWithPredicate = settlement.Culture.NotableTemplates.GetRandomElementWithPredicate((CharacterObject x) => x.Occupation == Occupation.Artisan && x.IsFemale);
                     }
-                    hero.Father = HeroCreator.CreateSpecialHero(randomElementWithPredicate, hero.CurrentSettlement, Clan.PlayerClan, null, age);
-                    if(0 < hero.Father.Gold)
+                    // create parent without assigning to PlayerClan (avoid Encyclopedia/Clan history entries)
+                    hero.Father = HeroCreator.CreateSpecialHero(randomElementWithPredicate, hero.CurrentSettlement, null, null, age);
+                    if (0 < hero.Father.Gold)
                     {
                         hero.Father.ChangeHeroGold(-hero.Father.Gold);
                     }
@@ -103,7 +102,7 @@ namespace Adoption
                 else
                 {
                     randomElementWithPredicate = settlement.Culture.NotableTemplates.GetRandomElementWithPredicate((CharacterObject x) => x.Occupation == Occupation.Wanderer && x.IsFemale);
-                    if(null == randomElementWithPredicate)
+                    if (null == randomElementWithPredicate)
                     {
                         randomElementWithPredicate = settlement.Culture.NotableTemplates.GetRandomElementWithPredicate((CharacterObject x) => x.Occupation == Occupation.Merchant && x.IsFemale);
                     }
@@ -111,7 +110,8 @@ namespace Adoption
                     {
                         randomElementWithPredicate = settlement.Culture.NotableTemplates.GetRandomElementWithPredicate((CharacterObject x) => x.Occupation == Occupation.Artisan && x.IsFemale);
                     }
-                    hero.Mother = HeroCreator.CreateSpecialHero(randomElementWithPredicate, hero.CurrentSettlement, Clan.PlayerClan, null, age);
+                    // create parent without assigning to PlayerClan (avoid Encyclopedia/Clan history entries)
+                    hero.Mother = HeroCreator.CreateSpecialHero(randomElementWithPredicate, hero.CurrentSettlement, null, null, age);
                     if (0 < hero.Mother.Gold)
                     {
                         hero.Mother.ChangeHeroGold(-hero.Mother.Gold);
@@ -180,39 +180,53 @@ namespace Adoption
 
             try
             {
+                // Always set the player as the child's parent (single authoritative parent for encyclopedia)
                 if (Hero.MainHero.IsFemale)
                 {
-                    adoptedHero.Mother = Hero.MainHero;
-                    if (null != adopter.Spouse)
-                    {
-                        adoptedHero.Father = adopter.Spouse;
-                    }
+                    if (adoptedHero.Mother != Hero.MainHero)
+                        adoptedHero.Mother = Hero.MainHero;
                 }
                 else
                 {
-                    adoptedHero.Father = Hero.MainHero;
-                    if (null != adopter.Spouse)
+                    if (adoptedHero.Father != Hero.MainHero)
+                        adoptedHero.Father = Hero.MainHero;
+                }
+
+                // If player has a spouse, don't assign them as a parent field (avoids duplicate sibling entries).
+                // Instead only ensure a positive personal relation between spouse and child.
+                if (Hero.MainHero.Spouse is not null)
+                {
+                    int spouseRelation = MBRandom.RandomInt(30, 50);
+                    try
                     {
-                        adoptedHero.Mother = adopter.Spouse;
+                        adoptedHero.SetPersonalRelation(Hero.MainHero.Spouse, spouseRelation);
+                        Hero.MainHero.Spouse.SetPersonalRelation(adoptedHero, spouseRelation);
+                    }
+                    catch
+                    {
+                        // ignore relation failures
                     }
                 }
-                var rnd = new Random();
-                int value = MBRandom.RandomInt(30, 70);
-                adoptedHero.SetPersonalRelation(Hero.MainHero, value);
-                Hero.MainHero.SetPersonalRelation(adoptedHero, value);
-                if (null != Hero.MainHero.Spouse)
+
+                // Ensure player <-> child relation
+                int playerRelation = MBRandom.RandomInt(30, 70);
+                try
                 {
-                    value = MBRandom.RandomInt(30, 50);
-                    adoptedHero.SetPersonalRelation(Hero.MainHero.Spouse, value);
-                    Hero.MainHero.Spouse.SetPersonalRelation(adoptedHero, value);
+                    adoptedHero.SetPersonalRelation(Hero.MainHero, playerRelation);
+                    Hero.MainHero.SetPersonalRelation(adoptedHero, playerRelation);
+                }
+                catch
+                {
+                    // ignore relation failures
                 }
             }
             catch
             {
-                // fall through to next attempt
+                // fallback to showing the message if something fails
                 InformationManager.DisplayMessage(new InformationMessage(text.ToString()));
             }
 
+            // Display adoption notification
             InformationManager.DisplayMessage(new InformationMessage(text.ToString()));
         }
     }
